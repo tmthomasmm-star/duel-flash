@@ -44,6 +44,14 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Mode local à deux joueurs conservé pour jouer sur le même téléphone.
 - Écrans et boutons adaptés automatiquement au mode choisi.
 
+## Version 0.7
+
+- Révélation visuelle de l'intrus après une erreur et à la fin du Rush.
+- Passage direct au niveau suivant après une réussite.
+- Félicitations élargies et combos de précision dans Stop Chrono.
+- Ordinateur Stop Chrono renforcé et score mis à jour à chaque manche.
+- Libellé Ordinateur clairement affiché dans les duels.
+
 Stop Chrono se joue en 5 manches. Intrus Rush se joue pendant 30 secondes ou 1 minute.
 
 ## Ouvrir le projet
