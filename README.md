@@ -7,6 +7,14 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - **Trouve l'intrus** : repérer le symbole différent avant la fin du chrono.
 - **Stop Chrono** : arrêter le compteur au plus près de la cible.
 
+## Version 0.2
+
+- 10 univers visuels pour Trouve l'intrus.
+- Grilles et difficulté progressives.
+- Résultat détaillé après chaque Stop Chrono : cible, temps réel, écart et points.
+- Écran de validation entre chaque joueur.
+- Nouvelle icône Duel Flash.
+
 Chaque partie se joue en 5 manches. Les joueurs alternent automatiquement et le meilleur score gagne.
 
 ## Ouvrir le projet

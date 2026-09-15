@@ -26,6 +26,22 @@ private val Card = Color(0xFF1B1F2A)
 private val Yellow = Color(0xFFFFD43B)
 private val Pink = Color(0xFFFF5470)
 private val Ice = Color(0xFF70E1F5)
+private val Green = Color(0xFF55E6A5)
+
+private data class OddPack(val normal: String, val odd: String, val name: String)
+
+private val oddPacks = listOf(
+    OddPack("😎", "🤓", "ÉMOJIS"),
+    OddPack("😈", "👿", "DIABLOTINS"),
+    OddPack("🍩", "🍪", "SUCRERIES"),
+    OddPack("🍋", "🍊", "FRUITS"),
+    OddPack("🐸", "🐢", "ANIMAUX"),
+    OddPack("🐯", "🦁", "JUNGLE"),
+    OddPack("🎮", "🕹️", "GAMING"),
+    OddPack("⚡", "✨", "ÉNERGIE"),
+    OddPack("💜", "💙", "NÉON"),
+    OddPack("🚀", "🛸", "ESPACE")
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +95,7 @@ private fun HomeScreen(onStart: (Game) -> Unit) {
         Text("FLASH", color = Color.White, fontSize = 56.sp, fontWeight = FontWeight.Black)
         Text("2 joueurs • 1 téléphone • 5 manches", color = Color.LightGray, fontSize = 16.sp)
         Spacer(Modifier.height(42.dp))
-        GameCard("🔍", "Trouve l’intrus", "Repère le symbole différent le plus vite possible", Pink) { onStart(Game.ODD_ONE) }
+        GameCard("🔍", "Trouve l’intrus", "Des univers qui changent et une difficulté progressive", Pink) { onStart(Game.ODD_ONE) }
         Spacer(Modifier.height(16.dp))
         GameCard("⏱", "Stop Chrono", "Arrête le temps au plus près de la cible", Ice) { onStart(Game.CHRONO) }
     }
@@ -107,36 +123,57 @@ private fun ScoreHeader(player: Int, round: Int, score1: Int, score2: Int) {
 
 @Composable
 private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, onDone: (Int) -> Unit) {
-    val symbols = listOf("●", "▲", "■", "◆", "★", "✚")
-    val base = remember(player, round) { symbols.random() }
-    val odd = remember(player, round) { symbols.filterNot { it == base }.random() }
-    val oddIndex = remember(player, round) { Random.nextInt(25) }
-    var timeLeft by remember(player, round) { mutableIntStateOf(50) }
+    val gridSize = 4 + (round - 1) / 2
+    val pack = remember(player, round) { oddPacks.random() }
+    val reversed = remember(player, round) { Random.nextBoolean() }
+    val base = if (reversed) pack.odd else pack.normal
+    val odd = if (reversed) pack.normal else pack.odd
+    val oddIndex = remember(player, round) { Random.nextInt(gridSize * gridSize) }
+    val cellSize = when (gridSize) { 4 -> 68.dp; 5 -> 56.dp; else -> 47.dp }
+    val symbolSize = when (gridSize) { 4 -> 35.sp; 5 -> 30.sp; else -> 25.sp }
+    var timeLeft by remember(player, round) { mutableIntStateOf(70 - (round - 1) * 5) }
     var answered by remember(player, round) { mutableStateOf(false) }
+    var selectedIndex by remember(player, round) { mutableIntStateOf(-1) }
+    var points by remember(player, round) { mutableIntStateOf(0) }
     LaunchedEffect(player, round) {
         while (timeLeft > 0 && !answered) { delay(100); timeLeft-- }
-        if (!answered) { answered = true; delay(500); onDone(0) }
+        if (!answered) { answered = true; selectedIndex = -2; points = 0 }
     }
     Column(Modifier.fillMaxSize().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        ScoreHeader(player, round, score1, score2); Spacer(Modifier.height(26.dp))
+        ScoreHeader(player, round, score1, score2); Spacer(Modifier.height(18.dp))
         Text("TROUVE L’INTRUS", color = Pink, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        Text("${timeLeft / 10}.${timeLeft % 10} s", color = Color.White, fontSize = 30.sp)
-        Spacer(Modifier.height(24.dp))
+        Text(pack.name, color = Color.LightGray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("${timeLeft / 10}.${timeLeft % 10} s", color = if (timeLeft <= 20) Pink else Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-            repeat(5) { row ->
+            repeat(gridSize) { row ->
                 Row {
-                    repeat(5) { col ->
-                        val index = row * 5 + col
-                        Box(Modifier.size(58.dp).padding(4.dp).background(Card, RoundedCornerShape(12.dp)).clickable(enabled = !answered) {
-                            answered = true; onDone(if (index == oddIndex) 100 + timeLeft * 2 else 0)
+                    repeat(gridSize) { col ->
+                        val index = row * gridSize + col
+                        val tileColor = when {
+                            answered && index == oddIndex -> Green.copy(alpha = 0.25f)
+                            answered && index == selectedIndex -> Pink.copy(alpha = 0.25f)
+                            else -> Card
+                        }
+                        Box(Modifier.size(cellSize).padding(3.dp).background(tileColor, RoundedCornerShape(13.dp)).clickable(enabled = !answered) {
+                            answered = true
+                            selectedIndex = index
+                            points = if (index == oddIndex) 150 + timeLeft * 3 + round * 15 else 0
                         }, contentAlignment = Alignment.Center) {
-                            Text(if (index == oddIndex) odd else base, color = if (index == oddIndex) Pink else Color.White, fontSize = 28.sp)
+                            Text(if (index == oddIndex) odd else base, color = Color.White, fontSize = symbolSize)
                         }
                     }
                 }
             }
         }
-        Text("Touche le symbole différent", color = Color.LightGray)
+        if (answered) {
+            Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(when { selectedIndex == oddIndex -> "BIEN VU !"; selectedIndex == -2 -> "TEMPS ÉCOULÉ"; else -> "RATÉ !" }, color = if (selectedIndex == oddIndex) Green else Pink, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(if (points > 0) "+$points points" else "L’intrus est maintenant indiqué", color = Color.White)
+                Spacer(Modifier.height(10.dp))
+                Button(onClick = { onDone(points) }, modifier = Modifier.fillMaxWidth()) { Text("JOUEUR SUIVANT") }
+            }
+        } else Text("Même couleur, un seul intrus", color = Color.LightGray)
     }
 }
 
@@ -147,6 +184,8 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
     var startTime by remember(player, round) { mutableLongStateOf(0L) }
     var elapsed by remember(player, round) { mutableLongStateOf(0L) }
     var hidden by remember(player, round) { mutableStateOf(false) }
+    var finished by remember(player, round) { mutableStateOf(false) }
+    var earnedPoints by remember(player, round) { mutableIntStateOf(0) }
     LaunchedEffect(started, player, round) {
         while (started) {
             elapsed = SystemClock.elapsedRealtime() - startTime
@@ -161,17 +200,44 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
             Spacer(Modifier.height(14.dp)); Text("CIBLE", color = Color.LightGray)
             Text(String.format("%.2f s", target), color = Yellow, fontSize = 48.sp, fontWeight = FontWeight.Black)
         }
-        Text(if (!started || !hidden) String.format("%.2f", elapsed / 1000f) else "?.??", color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Black)
-        Button(onClick = {
-            if (!started) { startTime = SystemClock.elapsedRealtime(); elapsed = 0; started = true }
-            else {
-                started = false
-                val difference = abs(elapsed - (target * 1000).toLong())
-                onDone((1000 - difference / 3).toInt().coerceIn(0, 1000))
+        if (finished) {
+            val targetMs = (target * 1000).toLong()
+            val difference = elapsed - targetMs
+            Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(24.dp)).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (abs(difference) <= 50) "PARFAIT !" else if (abs(difference) <= 200) "TRÈS PROCHE !" else "RÉSULTAT", color = if (abs(difference) <= 200) Green else Ice, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(12.dp))
+                ResultLine("Cible", String.format("%.2f s", target))
+                ResultLine("Ton temps", String.format("%.2f s", elapsed / 1000f))
+                ResultLine("Écart", String.format("%+.2f s", difference / 1000f))
+                HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color.DarkGray)
+                Text("+$earnedPoints points", color = Yellow, fontSize = 25.sp, fontWeight = FontWeight.Black)
             }
-        }, modifier = Modifier.fillMaxWidth().height(92.dp), colors = ButtonDefaults.buttonColors(containerColor = if (started) Pink else Ice), shape = RoundedCornerShape(26.dp)) {
-            Text(if (started) "STOP !" else "DÉMARRER", color = Night, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        } else {
+            Text(if (!started || !hidden) String.format("%.2f", elapsed / 1000f) else "?.??", color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Black)
         }
+        Button(onClick = {
+            when {
+                finished -> onDone(earnedPoints)
+                !started -> { startTime = SystemClock.elapsedRealtime(); elapsed = 0; hidden = false; started = true }
+                else -> {
+                    elapsed = SystemClock.elapsedRealtime() - startTime
+                    started = false
+                    val difference = abs(elapsed - (target * 1000).toLong())
+                    earnedPoints = (1000 - difference / 3).toInt().coerceIn(0, 1000)
+                    finished = true
+                }
+            }
+        }, modifier = Modifier.fillMaxWidth().height(92.dp), colors = ButtonDefaults.buttonColors(containerColor = when { finished -> Yellow; started -> Pink; else -> Ice }), shape = RoundedCornerShape(26.dp)) {
+            Text(when { finished -> "JOUEUR SUIVANT"; started -> "STOP !"; else -> "DÉMARRER" }, color = Night, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+@Composable
+private fun ResultLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.LightGray, fontSize = 17.sp)
+        Text(value, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
     }
 }
 
