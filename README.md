@@ -23,6 +23,14 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Compteur circulaire pour Stop Chrono.
 - Chronomètre et écrans de résultat plus lisibles.
 
+## Version 0.4
+
+- Nouvel accueil arcade électrique et logo repensé.
+- Mode Intrus Rush de 20 secondes avec combos, pénalités et Fever.
+- Célébrations Perfect, Incroyable et Presque pour Stop Chrono.
+- Pseudonymes et Top 10 local persistant pour chaque jeu.
+- Signature de développement stable pour les futures mises à jour de test.
+
 Chaque partie se joue en 5 manches. Les joueurs alternent automatiquement et le meilleur score gagne.
 
 ## Ouvrir le projet
