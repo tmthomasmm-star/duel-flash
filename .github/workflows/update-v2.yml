@@ -1,0 +1,47 @@
+name: Installer Duel Flash V2
+
+on:
+  push:
+    paths:
+      - ".github/workflows/update-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ouvrir le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer la V2
+        run: |
+          unzip -o Duel-Flash-V2.zip
+          rm Duel-Flash-V2.zip
+          git config user.name "Duel Flash Updater"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Install Duel Flash V2"
+          git push
+
+      - name: Installer Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Préparer Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Construire la V2
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Enregistrer le nouvel APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Duel-Flash-V2-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
