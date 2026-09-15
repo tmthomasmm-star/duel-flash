@@ -1,0 +1,27 @@
+name: Installer Duel Flash
+
+on:
+  push:
+    paths:
+      - ".github/workflows/installer.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ouvrir le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer le projet
+        run: |
+          unzip -o Duel-Flash-Android.zip
+          rm Duel-Flash-Android.zip
+          git config user.name "Duel Flash Installer"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Install Duel Flash Android prototype"
+          git push
