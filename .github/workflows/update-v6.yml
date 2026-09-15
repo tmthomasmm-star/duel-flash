@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   update:
-    if:${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Installer Duel Flash V6' }}
     runs-on: ubuntu-latest
 
     steps:
