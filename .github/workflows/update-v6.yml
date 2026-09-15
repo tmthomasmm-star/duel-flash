@@ -1,0 +1,43 @@
+name: Installer la V6
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: ${{ hashFiles('Duel-Flash-V6.zip') != '' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer la V6
+        run: |
+          unzip -o Duel-Flash-V6.zip
+          rm Duel-Flash-V6.zip
+          git config user.name "actions-user"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Installer Duel Flash V6"
+          git push
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Construire APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Duel-Flash-V6-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
