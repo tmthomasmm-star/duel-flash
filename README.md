@@ -15,6 +15,14 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Écran de validation entre chaque joueur.
 - Nouvelle icône Duel Flash.
 
+## Version 0.3
+
+- Tableau de scores permanent et joueur actif mis en valeur.
+- Scores actualisés après le tour de chaque joueur.
+- Nouveau fond dégradé et cartes translucides.
+- Compteur circulaire pour Stop Chrono.
+- Chronomètre et écrans de résultat plus lisibles.
+
 Chaque partie se joue en 5 manches. Les joueurs alternent automatiquement et le meilleur score gagne.
 
 ## Ouvrir le projet

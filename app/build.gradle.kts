@@ -10,10 +10,21 @@ android {
         applicationId = "com.zonechill.duelflash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
     buildFeatures { compose = true }
+    signingConfigs {
+        create("development") {
+            storeFile = file("dev-signing.jks")
+            storePassword = "duelflashdev"
+            keyAlias = "duelflash-dev"
+            keyPassword = "duelflashdev"
+        }
+    }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("development") }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

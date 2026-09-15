@@ -5,14 +5,17 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,6 +30,7 @@ private val Yellow = Color(0xFFFFD43B)
 private val Pink = Color(0xFFFF5470)
 private val Ice = Color(0xFF70E1F5)
 private val Green = Color(0xFF55E6A5)
+private val DeepBlue = Color(0xFF101A33)
 
 private data class OddPack(val normal: String, val odd: String, val name: String)
 
@@ -77,7 +81,7 @@ private fun DuelFlashApp() {
     }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Yellow, background = Night, surface = Card)) {
-        Surface(Modifier.fillMaxSize(), color = Night) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(DeepBlue, Night, Color(0xFF170F25))))) {
             when (screen) {
                 Screen.HOME -> HomeScreen(onStart = ::start)
                 Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, ::finishTurn)
@@ -115,9 +119,26 @@ private fun GameCard(icon: String, title: String, subtitle: String, color: Color
 
 @Composable
 private fun ScoreHeader(player: Int, round: Int, score1: Int, score2: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("MANCHE $round / 5  •  JOUEUR $player", color = Yellow, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp)); Text("J1  $score1     —     $score2  J2", color = Color.White, fontSize = 20.sp)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("MANCHE $round / 5", color = Yellow, fontSize = 13.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ScoreCard(1, score1, player == 1, Pink, Modifier.weight(1f))
+            ScoreCard(2, score2, player == 2, Ice, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ScoreCard(number: Int, score: Int, active: Boolean, accent: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier.background(if (active) accent.copy(alpha = 0.18f) else Card.copy(alpha = 0.82f), RoundedCornerShape(17.dp))
+            .border(if (active) 2.dp else 1.dp, if (active) accent else Color.White.copy(alpha = 0.08f), RoundedCornerShape(17.dp))
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(if (active) "● JOUEUR $number" else "JOUEUR $number", color = if (active) accent else Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(score.toString(), color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black)
     }
 }
 
@@ -143,7 +164,9 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
         ScoreHeader(player, round, score1, score2); Spacer(Modifier.height(18.dp))
         Text("TROUVE L’INTRUS", color = Pink, fontSize = 26.sp, fontWeight = FontWeight.Black)
         Text(pack.name, color = Color.LightGray, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Text("${timeLeft / 10}.${timeLeft % 10} s", color = if (timeLeft <= 20) Pink else Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        Box(Modifier.background((if (timeLeft <= 20) Pink else Yellow).copy(alpha = 0.15f), RoundedCornerShape(50.dp)).padding(horizontal = 20.dp, vertical = 6.dp)) {
+            Text("${timeLeft / 10}.${timeLeft % 10} s", color = if (timeLeft <= 20) Pink else Yellow, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        }
         Spacer(Modifier.height(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
             repeat(gridSize) { row ->
@@ -170,6 +193,11 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
             Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(when { selectedIndex == oddIndex -> "BIEN VU !"; selectedIndex == -2 -> "TEMPS ÉCOULÉ"; else -> "RATÉ !" }, color = if (selectedIndex == oddIndex) Green else Pink, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Text(if (points > 0) "+$points points" else "L’intrus est maintenant indiqué", color = Color.White)
+                Spacer(Modifier.height(5.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Text("J1  ${score1 + if (player == 1) points else 0}", color = Pink, fontWeight = FontWeight.Bold)
+                    Text("J2  ${score2 + if (player == 2) points else 0}", color = Ice, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.height(10.dp))
                 Button(onClick = { onDone(points) }, modifier = Modifier.fillMaxWidth()) { Text("JOUEUR SUIVANT") }
             }
@@ -195,10 +223,10 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
     }
     Column(Modifier.fillMaxSize().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
         ScoreHeader(player, round, score1, score2)
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().background(Card.copy(alpha = 0.72f), RoundedCornerShape(22.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("STOP CHRONO", color = Ice, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(14.dp)); Text("CIBLE", color = Color.LightGray)
-            Text(String.format("%.2f s", target), color = Yellow, fontSize = 48.sp, fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(8.dp)); Text("TEMPS CIBLE", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(String.format("%.2f s", target), color = Yellow, fontSize = 44.sp, fontWeight = FontWeight.Black)
         }
         if (finished) {
             val targetMs = (target * 1000).toLong()
@@ -211,9 +239,16 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
                 ResultLine("Écart", String.format("%+.2f s", difference / 1000f))
                 HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color.DarkGray)
                 Text("+$earnedPoints points", color = Yellow, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Text("J1  ${score1 + if (player == 1) earnedPoints else 0}", color = Pink, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                    Text("J2  ${score2 + if (player == 2) earnedPoints else 0}", color = Ice, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                }
             }
         } else {
-            Text(if (!started || !hidden) String.format("%.2f", elapsed / 1000f) else "?.??", color = Color.White, fontSize = 72.sp, fontWeight = FontWeight.Black)
+            Box(Modifier.size(178.dp).background(Card.copy(alpha = 0.75f), CircleShape).border(5.dp, if (started) Pink else Ice, CircleShape), contentAlignment = Alignment.Center) {
+                Text(if (!started || !hidden) String.format("%.2f", elapsed / 1000f) else "?.??", color = Color.White, fontSize = 54.sp, fontWeight = FontWeight.Black)
+            }
         }
         Button(onClick = {
             when {
@@ -247,7 +282,11 @@ private fun ResultScreen(score1: Int, score2: Int, onReplay: () -> Unit, onHome:
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text("⚡", fontSize = 70.sp)
         Text(title, color = Yellow, fontSize = 32.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(28.dp)); Text("$score1  —  $score2", color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(28.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            ScoreCard(1, score1, score1 >= score2, Pink, Modifier.weight(1f))
+            ScoreCard(2, score2, score2 >= score1, Ice, Modifier.weight(1f))
+        }
         Spacer(Modifier.height(42.dp)); Button(onClick = onReplay, modifier = Modifier.fillMaxWidth()) { Text("REVANCHE") }
         TextButton(onClick = onHome) { Text("Retour à l’accueil", color = Color.LightGray) }
     }
