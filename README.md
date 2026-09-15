@@ -36,7 +36,15 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Deux durées pour Intrus Rush : Flash 30 secondes et Endurance 1 minute.
 - Classements Top 10 séparés pour chaque durée.
 
-Chaque partie se joue en 5 manches. Les joueurs alternent automatiquement et le meilleur score gagne.
+## Version 0.6
+
+- Mode Solo libre pour battre son record.
+- Parcours Solo de 50 niveaux avec objectifs progressifs et sauvegarde des niveaux débloqués.
+- Duels contre l'ordinateur avec trois difficultés : Facile, Normal et Difficile.
+- Mode local à deux joueurs conservé pour jouer sur le même téléphone.
+- Écrans et boutons adaptés automatiquement au mode choisi.
+
+Stop Chrono se joue en 5 manches. Intrus Rush se joue pendant 30 secondes ou 1 minute.
 
 ## Ouvrir le projet
 

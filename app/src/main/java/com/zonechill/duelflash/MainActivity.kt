@@ -77,6 +77,8 @@ class MainActivity : ComponentActivity() {
 
 private enum class Screen { HOME, SETUP, LEADERBOARD, ODD_ONE, CHRONO, RESULT }
 private enum class Game { ODD_ONE, CHRONO }
+private enum class PlayMode { SOLO, PATH, CPU, LOCAL }
+private enum class Difficulty { EASY, NORMAL, HARD }
 
 @Composable
 private fun DuelFlashApp() {
@@ -87,12 +89,20 @@ private fun DuelFlashApp() {
     var player1Name by remember { mutableStateOf("Joueur 1") }
     var player2Name by remember { mutableStateOf("Joueur 2") }
     var rushSeconds by remember { mutableIntStateOf(30) }
+    var playMode by remember { mutableStateOf(PlayMode.SOLO) }
+    var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
+    val progressPrefs = remember { context.getSharedPreferences("duel_flash_progress", Context.MODE_PRIVATE) }
+    var soloLevel by remember { mutableIntStateOf(1) }
     var player by remember { mutableIntStateOf(1) }
     var round by remember { mutableIntStateOf(1) }
     var score1 by remember { mutableIntStateOf(0) }
     var score2 by remember { mutableIntStateOf(0) }
 
-    fun prepare(selected: Game) { game = selected; screen = Screen.SETUP }
+    fun prepare(selected: Game) {
+        game = selected
+        soloLevel = progressPrefs.getInt("level_${selected.name}", 1).coerceIn(1, 50)
+        screen = Screen.SETUP
+    }
     fun start() {
         player = 1; round = 1; score1 = 0; score2 = 0
         screen = if (game == Game.ODD_ONE) Screen.ODD_ONE else Screen.CHRONO
@@ -102,15 +112,35 @@ private fun DuelFlashApp() {
         val newScore2 = score2 + if (player == 2) points else 0
         score1 = newScore1; score2 = newScore2
         val lastRound = if (game == Game.ODD_ONE) 1 else 5
-        if (player == 2 && round >= lastRound) {
+        val soloFinished = playMode != PlayMode.LOCAL && player == 1 && round >= lastRound
+        val localFinished = playMode == PlayMode.LOCAL && player == 2 && round >= lastRound
+        if (soloFinished || localFinished) {
             val detail = if (game == Game.ODD_ONE) "Rush $rushSeconds s" else "5 manches"
             val board = if (game == Game.ODD_ONE) "RUSH_$rushSeconds" else "CHRONO"
             leaderboard.add(board, player1Name, newScore1, detail)
-            leaderboard.add(board, player2Name, newScore2, detail)
+            if (playMode == PlayMode.LOCAL) leaderboard.add(board, player2Name, newScore2, detail)
+            if (playMode == PlayMode.CPU) {
+                val scale = if (game == Game.ODD_ONE && rushSeconds == 60) 2 else 1
+                val cpuScore = when (game) {
+                    Game.ODD_ONE -> when (difficulty) { Difficulty.EASY -> Random.nextInt(400, 1301); Difficulty.NORMAL -> Random.nextInt(1200, 2801); Difficulty.HARD -> Random.nextInt(2500, 4501) } * scale
+                    Game.CHRONO -> when (difficulty) { Difficulty.EASY -> Random.nextInt(800, 2001); Difficulty.NORMAL -> Random.nextInt(1800, 3401); Difficulty.HARD -> Random.nextInt(3000, 4501) }
+                }
+                score2 = cpuScore
+            }
+            if (playMode == PlayMode.PATH) {
+                val objective = if (game == Game.ODD_ONE) 500 + soloLevel * 90 else (1100 + soloLevel * 65).coerceAtMost(4400)
+                if (newScore1 >= objective && soloLevel < 50) {
+                    val key = "level_${game.name}"
+                    val next = (soloLevel + 1).coerceAtMost(50)
+                    progressPrefs.edit().putInt(key, maxOf(progressPrefs.getInt(key, 1), next)).apply()
+                }
+            }
             screen = Screen.RESULT
         } else {
-            if (player == 2) round++
-            player = if (player == 1) 2 else 1
+            if (playMode == PlayMode.LOCAL) {
+                if (player == 2) round++
+                player = if (player == 1) 2 else 1
+            } else round++
             screen = if (game == Game.ODD_ONE) Screen.ODD_ONE else Screen.CHRONO
         }
     }
@@ -119,11 +149,11 @@ private fun DuelFlashApp() {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(DeepBlue, Night, Color(0xFF170F25))))) {
             when (screen) {
                 Screen.HOME -> HomeScreen(onStart = ::prepare, onLeaderboard = { screen = Screen.LEADERBOARD })
-                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, rushSeconds, { player1Name = it }, { player2Name = it }, { rushSeconds = it }, ::start, { screen = Screen.HOME })
+                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, rushSeconds, playMode, difficulty, soloLevel, progressPrefs.getInt("level_${game.name}", 1), { player1Name = it }, { player2Name = it }, { rushSeconds = it }, { playMode = it; if (it == PlayMode.CPU) player2Name = "Ordinateur" }, { difficulty = it }, { soloLevel = it }, ::start, { screen = Screen.HOME })
                 Screen.LEADERBOARD -> LeaderboardScreen(leaderboard, { screen = Screen.HOME })
-                Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, rushSeconds, ::finishTurn)
-                Screen.CHRONO -> ChronoScreen(player, round, score1, score2, ::finishTurn)
-                Screen.RESULT -> ResultScreen(score1, score2, player1Name, player2Name, ::start, { screen = Screen.HOME }, { screen = Screen.LEADERBOARD })
+                Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, rushSeconds, playMode, ::finishTurn)
+                Screen.CHRONO -> ChronoScreen(player, round, score1, score2, playMode, ::finishTurn)
+                Screen.RESULT -> ResultScreen(score1, score2, player1Name, player2Name, playMode, soloLevel, game, ::start, { screen = Screen.HOME }, { screen = Screen.LEADERBOARD })
             }
         }
     }
@@ -138,7 +168,7 @@ private fun HomeScreen(onStart: (Game) -> Unit, onLeaderboard: () -> Unit) {
         Spacer(Modifier.height(15.dp))
         Text("DUEL FLASH", color = Color.White, fontSize = 43.sp, fontWeight = FontWeight.Black)
         Text("DÉFIE • RÉAGIS • RECOMMENCE", color = Yellow, fontSize = 12.sp, fontWeight = FontWeight.Black)
-        Text("2 joueurs • 1 téléphone", color = Color.LightGray, fontSize = 15.sp)
+        Text("Solo • Ordinateur • 2 joueurs", color = Color.LightGray, fontSize = 15.sp)
         Spacer(Modifier.height(30.dp))
         GameCard("🔍", "Trouve l’intrus", "Des univers qui changent et une difficulté progressive", Pink) { onStart(Game.ODD_ONE) }
         Spacer(Modifier.height(16.dp))
@@ -151,24 +181,52 @@ private fun HomeScreen(onStart: (Game) -> Unit, onLeaderboard: () -> Unit) {
 }
 
 @Composable
-private fun SetupScreen(game: Game, name1: String, name2: String, rushSeconds: Int, onName1: (String) -> Unit, onName2: (String) -> Unit, onRushSeconds: (Int) -> Unit, onPlay: () -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(26.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+private fun SetupScreen(game: Game, name1: String, name2: String, rushSeconds: Int, mode: PlayMode, difficulty: Difficulty, level: Int, unlockedLevel: Int, onName1: (String) -> Unit, onName2: (String) -> Unit, onRushSeconds: (Int) -> Unit, onMode: (PlayMode) -> Unit, onDifficulty: (Difficulty) -> Unit, onLevel: (Int) -> Unit, onPlay: () -> Unit, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (game == Game.ODD_ONE) "🔍" else "⏱", fontSize = 58.sp)
-        Text("PRÉPAREZ LE DUEL", color = Yellow, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text(if (game == Game.ODD_ONE) "Choisissez votre rythme" else "5 manches chacun", color = Color.LightGray)
+        Text("CHOISIS TON MODE", color = Yellow, fontSize = 27.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(mode == PlayMode.SOLO, { onMode(PlayMode.SOLO) }, { Text("Solo") }, Modifier.weight(1f))
+            FilterChip(mode == PlayMode.PATH, { onMode(PlayMode.PATH) }, { Text("Niveaux") }, Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(mode == PlayMode.CPU, { onMode(PlayMode.CPU) }, { Text("Ordinateur") }, Modifier.weight(1f))
+            FilterChip(mode == PlayMode.LOCAL, { onMode(PlayMode.LOCAL) }, { Text("2 joueurs") }, Modifier.weight(1f))
+        }
+        if (mode == PlayMode.CPU) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf(Difficulty.EASY to "Facile", Difficulty.NORMAL to "Normal", Difficulty.HARD to "Difficile").forEach { (value, label) ->
+                    FilterChip(difficulty == value, { onDifficulty(value) }, { Text(label) })
+                }
+            }
+        }
+        if (mode == PlayMode.PATH) {
+            Spacer(Modifier.height(8.dp))
+            Text("PARCOURS SOLO • NIVEAU $level / 50", color = Green, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { onLevel((level - 1).coerceAtLeast(1)) }, enabled = level > 1) { Text("−") }
+                Text("  Débloqué : $unlockedLevel  ", color = Color.White)
+                OutlinedButton(onClick = { onLevel((level + 1).coerceAtMost(unlockedLevel)) }, enabled = level < unlockedLevel) { Text("+") }
+            }
+            val objective = if (game == Game.ODD_ONE) 500 + level * 90 else (1100 + level * 65).coerceAtMost(4400)
+            Text("Objectif : $objective points", color = Yellow)
+        }
         if (game == Game.ODD_ONE) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilterChip(rushSeconds == 30, { onRushSeconds(30) }, { Text("⚡ Flash 30 s") }, Modifier.weight(1f))
                 FilterChip(rushSeconds == 60, { onRushSeconds(60) }, { Text("🔥 Endurance 1 min") }, Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(name1, { onName1(it.take(12)) }, label = { Text("Pseudo joueur 1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(name2, { onName2(it.take(12)) }, label = { Text("Pseudo joueur 2") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(25.dp))
-        Button(onClick = onPlay, enabled = name1.isNotBlank() && name2.isNotBlank(), modifier = Modifier.fillMaxWidth().height(62.dp), shape = RoundedCornerShape(20.dp)) { Text("LANCER LE DUEL", fontWeight = FontWeight.Black) }
+        OutlinedTextField(name1, { onName1(it.take(12)) }, label = { Text("Pseudo joueur 1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (mode == PlayMode.LOCAL) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(name2, { onName2(it.take(12)) }, label = { Text("Pseudo joueur 2") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.height(18.dp))
+        Button(onClick = onPlay, enabled = name1.isNotBlank() && (mode != PlayMode.LOCAL || name2.isNotBlank()), modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(20.dp)) { Text(if (mode == PlayMode.SOLO || mode == PlayMode.PATH) "JOUER" else "LANCER LE DUEL", fontWeight = FontWeight.Black) }
         TextButton(onClick = onBack) { Text("Retour", color = Color.LightGray) }
     }
 }
@@ -211,13 +269,13 @@ private fun GameCard(icon: String, title: String, subtitle: String, color: Color
 }
 
 @Composable
-private fun ScoreHeader(player: Int, round: Int, score1: Int, score2: Int, totalRounds: Int = 5) {
+private fun ScoreHeader(player: Int, round: Int, score1: Int, score2: Int, mode: PlayMode, totalRounds: Int = 5) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (totalRounds == 1) "DUEL EN COURS" else "MANCHE $round / $totalRounds", color = Yellow, fontSize = 13.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ScoreCard(1, score1, player == 1, Pink, Modifier.weight(1f))
-            ScoreCard(2, score2, player == 2, Ice, Modifier.weight(1f))
+            if (mode == PlayMode.CPU || mode == PlayMode.LOCAL) ScoreCard(2, score2, player == 2, Ice, Modifier.weight(1f))
         }
     }
 }
@@ -236,7 +294,7 @@ private fun ScoreCard(number: Int, score: Int, active: Boolean, accent: Color, m
 }
 
 @Composable
-private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rushSeconds: Int, onDone: (Int) -> Unit) {
+private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rushSeconds: Int, mode: PlayMode, onDone: (Int) -> Unit) {
     var puzzle by remember(player) { mutableIntStateOf(0) }
     var timeLeft by remember(player, rushSeconds) { mutableIntStateOf(rushSeconds * 10) }
     var combo by remember(player) { mutableIntStateOf(0) }
@@ -257,7 +315,7 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rush
         finished = true
     }
     Column(Modifier.fillMaxSize().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        ScoreHeader(player, 1, score1, score2, 1); Spacer(Modifier.height(12.dp))
+        ScoreHeader(player, 1, score1, score2, mode, 1); Spacer(Modifier.height(12.dp))
         Text(if (timeLeft <= 50) "🔥 FEVER !" else "INTRUS RUSH", color = if (timeLeft <= 50) Yellow else Pink, fontSize = 25.sp, fontWeight = FontWeight.Black)
         Text("${pack.name}  •  TROUVÉS $found  •  COMBO ×$combo", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Box(Modifier.background((if (timeLeft <= 20) Pink else Yellow).copy(alpha = 0.15f), RoundedCornerShape(50.dp)).padding(horizontal = 20.dp, vertical = 6.dp)) {
@@ -297,17 +355,19 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rush
                 Spacer(Modifier.height(5.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     Text("J1  ${score1 + if (player == 1) points else 0}", color = Pink, fontWeight = FontWeight.Bold)
-                    Text("J2  ${score2 + if (player == 2) points else 0}", color = Ice, fontWeight = FontWeight.Bold)
+                    if (mode == PlayMode.CPU || mode == PlayMode.LOCAL) Text("J2  ${score2 + if (player == 2) points else 0}", color = Ice, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(10.dp))
-                Button(onClick = { onDone(points) }, modifier = Modifier.fillMaxWidth()) { Text("JOUEUR SUIVANT") }
+                Button(onClick = { onDone(points) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (mode == PlayMode.LOCAL && player == 1) "PASSER AU JOUEUR 2" else "VOIR LE RÉSULTAT")
+                }
             }
         } else Text("Erreur = −2 secondes • Fever = points ×2", color = Color.LightGray, fontSize = 12.sp)
     }
 }
 
 @Composable
-private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDone: (Int) -> Unit) {
+private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, mode: PlayMode, onDone: (Int) -> Unit) {
     val target = remember(player, round) { Random.nextInt(250, 651) / 100f }
     var started by remember(player, round) { mutableStateOf(false) }
     var startTime by remember(player, round) { mutableLongStateOf(0L) }
@@ -323,7 +383,7 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
         }
     }
     Column(Modifier.fillMaxSize().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
-        ScoreHeader(player, round, score1, score2)
+        ScoreHeader(player, round, score1, score2, mode)
         Column(Modifier.fillMaxWidth().background(Card.copy(alpha = 0.72f), RoundedCornerShape(22.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("STOP CHRONO", color = Ice, fontSize = 28.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(8.dp)); Text("TEMPS CIBLE", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -346,7 +406,7 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     Text("J1  ${score1 + if (player == 1) earnedPoints else 0}", color = Pink, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    Text("J2  ${score2 + if (player == 2) earnedPoints else 0}", color = Ice, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                    if (mode == PlayMode.CPU || mode == PlayMode.LOCAL) Text("J2  ${score2 + if (player == 2) earnedPoints else 0}", color = Ice, fontSize = 18.sp, fontWeight = FontWeight.Black)
                 }
             }
         } else {
@@ -367,7 +427,13 @@ private fun ChronoScreen(player: Int, round: Int, score1: Int, score2: Int, onDo
                 }
             }
         }, modifier = Modifier.fillMaxWidth().height(92.dp), colors = ButtonDefaults.buttonColors(containerColor = when { finished -> Yellow; started -> Pink; else -> Ice }), shape = RoundedCornerShape(26.dp)) {
-            Text(when { finished -> "JOUEUR SUIVANT"; started -> "STOP !"; else -> "DÉMARRER" }, color = Night, fontSize = 26.sp, fontWeight = FontWeight.Black)
+            Text(when {
+                finished && round < 5 -> "MANCHE SUIVANTE"
+                finished && mode == PlayMode.LOCAL && player == 1 -> "PASSER AU JOUEUR 2"
+                finished -> "VOIR LE RÉSULTAT"
+                started -> "STOP !"
+                else -> "DÉMARRER"
+            }, color = Night, fontSize = 24.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -381,17 +447,22 @@ private fun ResultLine(label: String, value: String) {
 }
 
 @Composable
-private fun ResultScreen(score1: Int, score2: Int, name1: String, name2: String, onReplay: () -> Unit, onHome: () -> Unit, onLeaderboard: () -> Unit) {
-    val title = when { score1 > score2 -> "$name1 GAGNE !"; score2 > score1 -> "$name2 GAGNE !"; else -> "ÉGALITÉ !" }
+private fun ResultScreen(score1: Int, score2: Int, name1: String, name2: String, mode: PlayMode, level: Int, game: Game, onReplay: () -> Unit, onHome: () -> Unit, onLeaderboard: () -> Unit) {
+    val objective = if (game == Game.ODD_ONE) 500 + level * 90 else (1100 + level * 65).coerceAtMost(4400)
+    val title = when (mode) {
+        PlayMode.SOLO -> "SCORE FINAL"
+        PlayMode.PATH -> if (score1 >= objective) "NIVEAU RÉUSSI !" else "ENCORE UN EFFORT !"
+        else -> when { score1 > score2 -> "$name1 GAGNE !"; score2 > score1 -> "$name2 GAGNE !"; else -> "ÉGALITÉ !" }
+    }
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text("⚡", fontSize = 70.sp)
         Text(title, color = Yellow, fontSize = 32.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
         Spacer(Modifier.height(28.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ScoreCard(1, score1, score1 >= score2, Pink, Modifier.weight(1f))
-            ScoreCard(2, score2, score2 >= score1, Ice, Modifier.weight(1f))
+            if (mode == PlayMode.CPU || mode == PlayMode.LOCAL) ScoreCard(2, score2, score2 >= score1, Ice, Modifier.weight(1f))
         }
-        Text("$name1  contre  $name2", color = Color.LightGray, modifier = Modifier.padding(top = 12.dp))
+        Text(when (mode) { PlayMode.PATH -> "Objectif : $objective points"; PlayMode.CPU -> "$name1 contre l’ordinateur"; PlayMode.LOCAL -> "$name1 contre $name2"; else -> "Record personnel" }, color = Color.LightGray, modifier = Modifier.padding(top = 12.dp))
         Spacer(Modifier.height(36.dp)); Button(onClick = onReplay, modifier = Modifier.fillMaxWidth()) { Text("REVANCHE") }
         OutlinedButton(onClick = onLeaderboard, modifier = Modifier.fillMaxWidth()) { Text("VOIR LE TOP 10") }
         TextButton(onClick = onHome) { Text("Retour à l’accueil", color = Color.LightGray) }
