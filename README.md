@@ -31,6 +31,11 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Pseudonymes et Top 10 local persistant pour chaque jeu.
 - Signature de développement stable pour les futures mises à jour de test.
 
+## Version 0.5
+
+- Deux durées pour Intrus Rush : Flash 30 secondes et Endurance 1 minute.
+- Classements Top 10 séparés pour chaque durée.
+
 Chaque partie se joue en 5 manches. Les joueurs alternent automatiquement et le meilleur score gagne.
 
 ## Ouvrir le projet

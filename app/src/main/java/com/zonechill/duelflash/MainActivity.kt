@@ -41,15 +41,15 @@ private data class ScoreEntry(val name: String, val score: Int, val detail: Stri
 
 private class LeaderboardStore(context: Context) {
     private val prefs = context.getSharedPreferences("duel_flash_scores", Context.MODE_PRIVATE)
-    fun load(game: Game): List<ScoreEntry> = prefs.getString(game.name, "").orEmpty()
+    fun load(board: String): List<ScoreEntry> = prefs.getString(board, "").orEmpty()
         .split(";;").filter { it.isNotBlank() }.mapNotNull { line ->
             val p = line.split("|"); if (p.size == 4) ScoreEntry(p[0], p[1].toIntOrNull() ?: 0, p[2], p[3]) else null
         }.sortedByDescending { it.score }.take(10)
-    fun add(game: Game, name: String, score: Int, detail: String) {
+    fun add(board: String, name: String, score: Int, detail: String) {
         val date = SimpleDateFormat("dd/MM", Locale.FRANCE).format(Date())
-        val values = (load(game) + ScoreEntry(name.replace("|", ""), score, detail.replace("|", ""), date))
+        val values = (load(board) + ScoreEntry(name.replace("|", ""), score, detail.replace("|", ""), date))
             .sortedByDescending { it.score }.take(10)
-        prefs.edit().putString(game.name, values.joinToString(";;") { "${it.name}|${it.score}|${it.detail}|${it.date}" }).apply()
+        prefs.edit().putString(board, values.joinToString(";;") { "${it.name}|${it.score}|${it.detail}|${it.date}" }).apply()
     }
 }
 
@@ -86,6 +86,7 @@ private fun DuelFlashApp() {
     var game by remember { mutableStateOf(Game.ODD_ONE) }
     var player1Name by remember { mutableStateOf("Joueur 1") }
     var player2Name by remember { mutableStateOf("Joueur 2") }
+    var rushSeconds by remember { mutableIntStateOf(30) }
     var player by remember { mutableIntStateOf(1) }
     var round by remember { mutableIntStateOf(1) }
     var score1 by remember { mutableIntStateOf(0) }
@@ -102,9 +103,10 @@ private fun DuelFlashApp() {
         score1 = newScore1; score2 = newScore2
         val lastRound = if (game == Game.ODD_ONE) 1 else 5
         if (player == 2 && round >= lastRound) {
-            val detail = if (game == Game.ODD_ONE) "Rush 20 s" else "5 manches"
-            leaderboard.add(game, player1Name, newScore1, detail)
-            leaderboard.add(game, player2Name, newScore2, detail)
+            val detail = if (game == Game.ODD_ONE) "Rush $rushSeconds s" else "5 manches"
+            val board = if (game == Game.ODD_ONE) "RUSH_$rushSeconds" else "CHRONO"
+            leaderboard.add(board, player1Name, newScore1, detail)
+            leaderboard.add(board, player2Name, newScore2, detail)
             screen = Screen.RESULT
         } else {
             if (player == 2) round++
@@ -117,9 +119,9 @@ private fun DuelFlashApp() {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(DeepBlue, Night, Color(0xFF170F25))))) {
             when (screen) {
                 Screen.HOME -> HomeScreen(onStart = ::prepare, onLeaderboard = { screen = Screen.LEADERBOARD })
-                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, { player1Name = it }, { player2Name = it }, ::start, { screen = Screen.HOME })
+                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, rushSeconds, { player1Name = it }, { player2Name = it }, { rushSeconds = it }, ::start, { screen = Screen.HOME })
                 Screen.LEADERBOARD -> LeaderboardScreen(leaderboard, { screen = Screen.HOME })
-                Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, ::finishTurn)
+                Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, rushSeconds, ::finishTurn)
                 Screen.CHRONO -> ChronoScreen(player, round, score1, score2, ::finishTurn)
                 Screen.RESULT -> ResultScreen(score1, score2, player1Name, player2Name, ::start, { screen = Screen.HOME }, { screen = Screen.LEADERBOARD })
             }
@@ -149,12 +151,19 @@ private fun HomeScreen(onStart: (Game) -> Unit, onLeaderboard: () -> Unit) {
 }
 
 @Composable
-private fun SetupScreen(game: Game, name1: String, name2: String, onName1: (String) -> Unit, onName2: (String) -> Unit, onPlay: () -> Unit, onBack: () -> Unit) {
+private fun SetupScreen(game: Game, name1: String, name2: String, rushSeconds: Int, onName1: (String) -> Unit, onName2: (String) -> Unit, onRushSeconds: (Int) -> Unit, onPlay: () -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(26.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (game == Game.ODD_ONE) "🔍" else "⏱", fontSize = 58.sp)
         Text("PRÉPAREZ LE DUEL", color = Yellow, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text(if (game == Game.ODD_ONE) "20 secondes chacun" else "5 manches chacun", color = Color.LightGray)
-        Spacer(Modifier.height(30.dp))
+        Text(if (game == Game.ODD_ONE) "Choisissez votre rythme" else "5 manches chacun", color = Color.LightGray)
+        if (game == Game.ODD_ONE) {
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FilterChip(rushSeconds == 30, { onRushSeconds(30) }, { Text("⚡ Flash 30 s") }, Modifier.weight(1f))
+                FilterChip(rushSeconds == 60, { onRushSeconds(60) }, { Text("🔥 Endurance 1 min") }, Modifier.weight(1f))
+            }
+        }
+        Spacer(Modifier.height(24.dp))
         OutlinedTextField(name1, { onName1(it.take(12)) }, label = { Text("Pseudo joueur 1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(name2, { onName2(it.take(12)) }, label = { Text("Pseudo joueur 2") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -166,15 +175,16 @@ private fun SetupScreen(game: Game, name1: String, name2: String, onName1: (Stri
 
 @Composable
 private fun LeaderboardScreen(store: LeaderboardStore, onBack: () -> Unit) {
-    var selected by remember { mutableStateOf(Game.ODD_ONE) }
+    var selected by remember { mutableStateOf("RUSH_30") }
     val scores = store.load(selected)
     Column(Modifier.fillMaxSize().padding(22.dp)) {
         TextButton(onClick = onBack) { Text("‹ ACCUEIL", color = Color.LightGray) }
         Text("🏆 TOP 10", color = Yellow, fontSize = 34.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(15.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilterChip(selected == Game.ODD_ONE, { selected = Game.ODD_ONE }, { Text("Intrus Rush") }, Modifier.weight(1f))
-            FilterChip(selected == Game.CHRONO, { selected = Game.CHRONO }, { Text("Stop Chrono") }, Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(selected == "RUSH_30", { selected = "RUSH_30" }, { Text("30 s") }, Modifier.weight(1f))
+            FilterChip(selected == "RUSH_60", { selected = "RUSH_60" }, { Text("1 min") }, Modifier.weight(1f))
+            FilterChip(selected == "CHRONO", { selected = "CHRONO" }, { Text("Chrono") }, Modifier.weight(1f))
         }
         Spacer(Modifier.height(15.dp))
         if (scores.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Aucun score pour le moment", color = Color.LightGray) }
@@ -226,9 +236,9 @@ private fun ScoreCard(number: Int, score: Int, active: Boolean, accent: Color, m
 }
 
 @Composable
-private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, onDone: (Int) -> Unit) {
+private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rushSeconds: Int, onDone: (Int) -> Unit) {
     var puzzle by remember(player) { mutableIntStateOf(0) }
-    var timeLeft by remember(player) { mutableIntStateOf(200) }
+    var timeLeft by remember(player, rushSeconds) { mutableIntStateOf(rushSeconds * 10) }
     var combo by remember(player) { mutableIntStateOf(0) }
     var bestCombo by remember(player) { mutableIntStateOf(0) }
     var found by remember(player) { mutableIntStateOf(0) }
