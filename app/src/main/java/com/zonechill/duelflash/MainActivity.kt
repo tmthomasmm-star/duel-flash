@@ -11,6 +11,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,14 +86,26 @@ private enum class Game { ODD_ONE, CHRONO }
 private enum class PlayMode { SOLO, PATH, CPU, LOCAL }
 private enum class Difficulty { EASY, NORMAL, HARD }
 
+private fun levelObjective(game: Game, level: Int, rushSeconds: Int): Int {
+    val challengeBonus = if (level % 5 == 0) 1 else 0
+    return when (game) {
+        Game.ODD_ONE -> {
+            val thirtySeconds = 3000 + level * 300 + challengeBonus * 1000
+            if (rushSeconds == 60) (thirtySeconds * 1.8f).toInt() else thirtySeconds
+        }
+        Game.CHRONO -> 1600 + level * 70 + challengeBonus * 350
+    }
+}
+
 @Composable
 private fun DuelFlashApp() {
     val context = LocalContext.current
     val leaderboard = remember { LeaderboardStore(context) }
+    val profilePrefs = remember { context.getSharedPreferences("duel_flash_profile", Context.MODE_PRIVATE) }
     var screen by remember { mutableStateOf(Screen.HOME) }
     var game by remember { mutableStateOf(Game.ODD_ONE) }
-    var player1Name by remember { mutableStateOf("Joueur 1") }
-    var player2Name by remember { mutableStateOf("Joueur 2") }
+    var player1Name by remember { mutableStateOf(profilePrefs.getString("player1", "Joueur 1") ?: "Joueur 1") }
+    var player2Name by remember { mutableStateOf(profilePrefs.getString("player2", "Joueur 2") ?: "Joueur 2") }
     var rushSeconds by remember { mutableIntStateOf(30) }
     var playMode by remember { mutableStateOf(PlayMode.SOLO) }
     var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
@@ -117,10 +134,10 @@ private fun DuelFlashApp() {
                 Game.ODD_ONE -> {
                     val scale = if (rushSeconds == 60) 2 else 1
                     when (difficulty) {
-                        Difficulty.EASY -> Random.nextInt(400, 1301)
-                        Difficulty.NORMAL -> Random.nextInt(1200, 2801)
-                        Difficulty.HARD -> Random.nextInt(2500, 4501)
-                    } * scale
+                        Difficulty.EASY -> maxOf(Random.nextInt(500, 1301) * scale, (points * Random.nextDouble(0.40, 0.66)).toInt())
+                        Difficulty.NORMAL -> maxOf(Random.nextInt(1400, 2801) * scale, (points * Random.nextDouble(0.65, 0.91)).toInt())
+                        Difficulty.HARD -> maxOf(Random.nextInt(2800, 4501) * scale, (points * Random.nextDouble(0.90, 1.16)).toInt())
+                    }
                 }
                 Game.CHRONO -> when (difficulty) {
                     Difficulty.EASY -> maxOf(Random.nextInt(250, 551), (points * Random.nextDouble(0.45, 0.76)).toInt())
@@ -140,7 +157,7 @@ private fun DuelFlashApp() {
             leaderboard.add(board, player1Name, newScore1, detail)
             if (playMode == PlayMode.LOCAL) leaderboard.add(board, player2Name, newScore2, detail)
             if (playMode == PlayMode.PATH) {
-                val objective = if (game == Game.ODD_ONE) 500 + soloLevel * 90 else (1100 + soloLevel * 65).coerceAtMost(4400)
+                val objective = levelObjective(game, soloLevel, rushSeconds)
                 if (newScore1 >= objective && soloLevel < 50) {
                     val key = "level_${game.name}"
                     val next = (soloLevel + 1).coerceAtMost(50)
@@ -161,13 +178,20 @@ private fun DuelFlashApp() {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(DeepBlue, Night, Color(0xFF170F25))))) {
             when (screen) {
                 Screen.HOME -> HomeScreen(onStart = ::prepare, onLeaderboard = { screen = Screen.LEADERBOARD })
-                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, rushSeconds, playMode, difficulty, soloLevel, progressPrefs.getInt("level_${game.name}", 1), { player1Name = it }, { player2Name = it }, { rushSeconds = it }, { playMode = it; if (it == PlayMode.CPU) player2Name = "Ordinateur" }, { difficulty = it }, { soloLevel = it }, ::start, { screen = Screen.HOME })
+                Screen.SETUP -> SetupScreen(game, player1Name, player2Name, rushSeconds, playMode, difficulty, soloLevel, progressPrefs.getInt("level_${game.name}", 1), {
+                    player1Name = it; profilePrefs.edit().putString("player1", it).apply()
+                }, {
+                    player2Name = it; profilePrefs.edit().putString("player2", it).apply()
+                }, { rushSeconds = it }, {
+                    playMode = it
+                    player2Name = if (it == PlayMode.CPU) "Ordinateur" else profilePrefs.getString("player2", "Joueur 2") ?: "Joueur 2"
+                }, { difficulty = it }, { soloLevel = it }, ::start, { screen = Screen.HOME })
                 Screen.LEADERBOARD -> LeaderboardScreen(leaderboard, { screen = Screen.HOME })
                 Screen.ODD_ONE -> OddOneScreen(player, round, score1, score2, rushSeconds, playMode, ::finishTurn)
                 Screen.CHRONO -> ChronoScreen(player, round, score1, score2, playMode, if (player == 1) precisionCombo1 else precisionCombo2, {
                     if (player == 1) precisionCombo1 = it else precisionCombo2 = it
                 }, ::finishTurn)
-                Screen.RESULT -> ResultScreen(score1, score2, player1Name, player2Name, playMode, soloLevel, game, ::start, {
+                Screen.RESULT -> ResultScreen(score1, score2, player1Name, player2Name, playMode, soloLevel, game, rushSeconds, ::start, {
                     soloLevel = (soloLevel + 1).coerceAtMost(50)
                     start()
                 }, { screen = Screen.HOME }, { screen = Screen.LEADERBOARD })
@@ -200,7 +224,9 @@ private fun HomeScreen(onStart: (Game) -> Unit, onLeaderboard: () -> Unit) {
 @Composable
 private fun SetupScreen(game: Game, name1: String, name2: String, rushSeconds: Int, mode: PlayMode, difficulty: Difficulty, level: Int, unlockedLevel: Int, onName1: (String) -> Unit, onName2: (String) -> Unit, onRushSeconds: (Int) -> Unit, onMode: (PlayMode) -> Unit, onDifficulty: (Difficulty) -> Unit, onLevel: (Int) -> Unit, onPlay: () -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(if (game == Game.ODD_ONE) "🔍" else "⏱", fontSize = 58.sp)
+        Box(Modifier.size(82.dp).background(if (game == Game.ODD_ONE) Pink.copy(alpha = 0.20f) else Ice.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
+            Text(if (game == Game.ODD_ONE) "🔍" else "⏱️", fontSize = 52.sp)
+        }
         Text("CHOISIS TON MODE", color = Yellow, fontSize = 27.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -220,13 +246,13 @@ private fun SetupScreen(game: Game, name1: String, name2: String, rushSeconds: I
         }
         if (mode == PlayMode.PATH) {
             Spacer(Modifier.height(8.dp))
-            Text("PARCOURS SOLO • NIVEAU $level / 50", color = Green, fontWeight = FontWeight.Black)
+            Text(if (level % 5 == 0) "🔥 NIVEAU DÉFI $level / 50" else "PARCOURS SOLO • NIVEAU $level / 50", color = if (level % 5 == 0) Yellow else Green, fontWeight = FontWeight.Black)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { onLevel((level - 1).coerceAtLeast(1)) }, enabled = level > 1) { Text("−") }
                 Text("  Débloqué : $unlockedLevel  ", color = Color.White)
                 OutlinedButton(onClick = { onLevel((level + 1).coerceAtMost(unlockedLevel)) }, enabled = level < unlockedLevel) { Text("+") }
             }
-            val objective = if (game == Game.ODD_ONE) 500 + level * 90 else (1100 + level * 65).coerceAtMost(4400)
+            val objective = levelObjective(game, level, rushSeconds)
             Text("Objectif : $objective points", color = Yellow)
         }
         if (game == Game.ODD_ONE) {
@@ -322,6 +348,12 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rush
     var finished by remember(player) { mutableStateOf(false) }
     var revealing by remember(player) { mutableStateOf(false) }
     var wrongIndex by remember(player) { mutableIntStateOf(-1) }
+    val pulse by rememberInfiniteTransition(label = "intruderPulse").animateFloat(
+        initialValue = 0.40f,
+        targetValue = 0.90f,
+        animationSpec = infiniteRepeatable(tween(300), RepeatMode.Reverse),
+        label = "intruderAlpha"
+    )
     val gridSize = when { found >= 8 -> 6; found >= 3 -> 5; else -> 4 }
     val pack = remember(player, puzzle) { oddPacks.random() }
     val reversed = remember(player, puzzle) { Random.nextBoolean() }
@@ -349,11 +381,13 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rush
                     repeat(gridSize) { col ->
                         val index = row * gridSize + col
                         val cellColor = when {
-                            revealing && index == oddIndex -> Green.copy(alpha = 0.55f)
+                            revealing && index == oddIndex -> Green.copy(alpha = pulse)
                             revealing && index == wrongIndex -> Pink.copy(alpha = 0.55f)
                             else -> Card
                         }
-                        Box(Modifier.size(cellSize).padding(3.dp).background(cellColor, RoundedCornerShape(13.dp)).clickable(enabled = !finished && !revealing) {
+                        val cellModifier = Modifier.size(cellSize).padding(3.dp).background(cellColor, RoundedCornerShape(13.dp))
+                            .then(if (revealing && index == oddIndex) Modifier.border(3.dp, Yellow, RoundedCornerShape(13.dp)) else Modifier)
+                        Box(cellModifier.clickable(enabled = !finished && !revealing) {
                             if (index == oddIndex) {
                                 combo++
                                 if (combo > bestCombo) bestCombo = combo
@@ -383,7 +417,7 @@ private fun OddOneScreen(player: Int, round: Int, score1: Int, score2: Int, rush
                 }
             }
         }
-        if (revealing && !finished) Text("💡 L’intrus était ici !", color = Green, fontWeight = FontWeight.Black)
+        if (revealing) Text("💡 L’INTRUS ÉTAIT ICI !", color = Green, fontWeight = FontWeight.Black)
         if (finished) {
             Column(Modifier.fillMaxWidth().background(Card, RoundedCornerShape(18.dp)).padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("FIN DU RUSH !", color = Yellow, fontSize = 22.sp, fontWeight = FontWeight.Black)
@@ -488,8 +522,8 @@ private fun ResultLine(label: String, value: String) {
 }
 
 @Composable
-private fun ResultScreen(score1: Int, score2: Int, name1: String, name2: String, mode: PlayMode, level: Int, game: Game, onReplay: () -> Unit, onNextLevel: () -> Unit, onHome: () -> Unit, onLeaderboard: () -> Unit) {
-    val objective = if (game == Game.ODD_ONE) 500 + level * 90 else (1100 + level * 65).coerceAtMost(4400)
+private fun ResultScreen(score1: Int, score2: Int, name1: String, name2: String, mode: PlayMode, level: Int, game: Game, rushSeconds: Int, onReplay: () -> Unit, onNextLevel: () -> Unit, onHome: () -> Unit, onLeaderboard: () -> Unit) {
+    val objective = levelObjective(game, level, rushSeconds)
     val title = when (mode) {
         PlayMode.SOLO -> "SCORE FINAL"
         PlayMode.PATH -> if (score1 >= objective) "NIVEAU RÉUSSI !" else "ENCORE UN EFFORT !"

@@ -52,6 +52,15 @@ Prototype Android de mini-jeux rapides jouables à deux sur le même téléphone
 - Ordinateur Stop Chrono renforcé et score mis à jour à chaque manche.
 - Libellé Ordinateur clairement affiché dans les duels.
 
+## Version 0.8
+
+- Nouvelle courbe de difficulté sur 50 niveaux, construite à partir des scores de test.
+- Niveau défi tous les 5 niveaux et objectifs distincts pour chaque jeu et chaque durée.
+- Ordinateur Intrus Rush adapté aux gros combos et à la performance du joueur.
+- Révélation de l'intrus renforcée avec pulsation, contour et message visible.
+- Pseudonymes mémorisés automatiquement.
+- Icône Stop Chrono plus lisible sur l'écran de choix du mode.
+
 Stop Chrono se joue en 5 manches. Intrus Rush se joue pendant 30 secondes ou 1 minute.
 
 ## Ouvrir le projet
